@@ -1,0 +1,24 @@
+# NeMo Guardrails configuration for the code agent.
+# See: https://github.com/NVIDIA/NeMo-Guardrails
+#
+# To activate full guardrails:
+#   1. pip install nemoguardrails
+#   2. Set GUARDRAILS_LLM_URL / GUARDRAILS_LLM_MODEL in .env
+#   3. Load this config in workflow.py via LLMRails(RailsConfig.from_path("guardrails/"))
+
+models:
+  - type: main
+    engine: openai
+    model: ${PLANNER_MODEL}
+    parameters:
+      base_url: ${PLANNER_URL}
+      api_key: ${PLANNER_API_KEY}
+
+rails:
+  input:
+    flows:
+      - check impolite input
+  output:
+    flows:
+      - check harmful code output
+      - check impolite output

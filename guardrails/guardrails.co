@@ -1,0 +1,46 @@
+# Colang guardrails for the code agent.
+# These rails run on the Planner's final output before it reaches the user.
+
+# ---------------------------------------------------------------------------
+# Output rail: destructive code patterns
+# ---------------------------------------------------------------------------
+
+define flow check harmful code output
+  # Block responses that attempt to generate malware or destructive scripts.
+  if "rm -rf /" in $bot_message or "DROP TABLE" in $bot_message
+    bot refuse harmful code
+    stop
+
+  # Block responses containing exploits or malicious intent.
+  if "exploit" in $bot_message and "vulnerability" in $bot_message
+    bot refuse harmful code
+    stop
+
+define bot refuse harmful code
+  "I can't generate code that could cause unintended system damage. Please rephrase your request."
+
+# ---------------------------------------------------------------------------
+# Output rail: impolite or unprofessional language
+# ---------------------------------------------------------------------------
+
+define flow check impolite output
+  $is_impolite = execute check_if_impolite(text=$bot_message)
+  if $is_impolite
+    bot apologize and rephrase
+    stop
+
+define bot apologize and rephrase
+  "I apologize if my previous response was unclear or unhelpful. Let me try again in a more professional manner."
+
+# ---------------------------------------------------------------------------
+# Input rail: impolite user messages
+# ---------------------------------------------------------------------------
+
+define flow check impolite input
+  $is_impolite = execute check_if_impolite(text=$user_message)
+  if $is_impolite
+    bot ask to rephrase politely
+    stop
+
+define bot ask to rephrase politely
+  "I'm here to help with coding tasks. Could you please rephrase your request in a more constructive way?"

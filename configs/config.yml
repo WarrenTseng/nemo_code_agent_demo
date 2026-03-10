@@ -1,0 +1,71 @@
+# nemo_code_agent — main runtime configuration
+# Follows the NeMo Agent Toolkit (NAT) YAML schema.
+# All ${VAR} references are resolved from the environment (or .env).
+
+general:
+  use_uvloop: true
+  telemetry:
+    logging:
+      console:
+        _type: console
+        level: WARNING   # Keep the NAT console quiet; our Rich UI handles UX.
+
+# ---------------------------------------------------------------------------
+# LLM Definitions
+# Two named LLMs using the "nim" type, which accepts any OpenAI-compatible
+# base_url — so vLLM's /v1 endpoint works without a separate adapter.
+# ---------------------------------------------------------------------------
+llms:
+  planner_llm:
+    _type: nim
+    model_name: ${PLANNER_MODEL}          # e.g. nvidia/llama-3.1-nemotron-70b-instruct
+    base_url: ${PLANNER_URL}              # e.g. https://integrate.api.nvidia.com/v1
+    api_key: ${PLANNER_API_KEY}
+    temperature: 0.2
+    top_p: 0.9
+    max_tokens: 8192
+    num_retries: 3
+
+  coder_llm:
+    _type: nim
+    model_name: ${CODER_MODEL}            # e.g. deepseek-coder-v2-instruct
+    base_url: ${CODER_URL}               # e.g. http://localhost:8000/v1
+    api_key: ${CODER_API_KEY:-none}      # vLLM typically accepts any non-empty key
+    temperature: 0.1
+    top_p: 0.95
+    max_tokens: 16384
+    num_retries: 2
+
+# ---------------------------------------------------------------------------
+# Tool & Agent Function Definitions
+# ---------------------------------------------------------------------------
+functions:
+  # --- Coder Tool (Phase 2) ---
+  # The Coder model is registered as a callable tool, not a top-level node.
+  # The Planner invokes it via a tool call; the Coder runs against coder_llm.
+  coder_tool:
+    _type: coder_tool
+    llm: coder_llm
+
+  # --- Filesystem Tools (Phase 2) ---
+  read_file_tool:
+    _type: read_file_tool
+
+  write_file_tool:
+    _type: write_file_tool
+
+  execute_bash_tool:
+    _type: execute_bash_tool
+    require_confirmation: true            # Prompt user in CLI before execution
+
+# ---------------------------------------------------------------------------
+# Top-level Workflow
+# ---------------------------------------------------------------------------
+# The code_agent_workflow is a self-contained LangGraph ReAct agent.
+# It wires coder_tool, read_file_tool, and execute_bash_tool internally —
+# there is no separate planner_agent function entry needed.
+# The workflow receives planner_llm via Builder.get_llm() at runtime.
+workflow:
+  _type: code_agent_workflow
+  llm: planner_llm
+  checkpoint_db: ${CODE_AGENT_CHECKPOINT_DB:-.agent_logs/checkpoints.db}

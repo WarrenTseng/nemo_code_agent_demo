@@ -1,0 +1,70 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+
+[project]
+name = "nemo-code-agent"
+dynamic = ["version"]
+description = "Interactive multi-agent CLI coding agent (Planner via NIM + Coder via vLLM)"
+requires-python = ">=3.10"
+classifiers = ["Programming Language :: Python"]
+
+dependencies = [
+    # --- LLM clients (OpenAI-compatible: NIM for Planner, vLLM for Coder) ---
+    "langchain-openai>=0.3.0",
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+
+    # --- LangGraph agent framework + SQLite session persistence ---
+    "langgraph>=0.2.0",
+    "langgraph-checkpoint-sqlite>=2.0.0",
+
+    # --- CLI interface ---
+    "typer>=0.15.0",
+    "rich>=13.7.0",
+    "prompt-toolkit>=3.0.47",
+
+    # --- Config & env ---
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.7.0",
+]
+
+# ---------------------------------------------------------------------------
+# Entry Points
+# ---------------------------------------------------------------------------
+
+# 1. NeMo Agent Toolkit plugin registration (for ``nat run`` compatibility).
+[project.entry-points."nat.components"]
+nemo_code_agent = "nemo_code_agent.register"
+
+# 2. Primary CLI command installed on PATH.
+[project.scripts]
+code-agent = "nemo_code_agent.cli.main:app"
+
+# ---------------------------------------------------------------------------
+# Source layout
+# ---------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+fallback_version = "0.0.0.dev0"
+
+# ---------------------------------------------------------------------------
+# Optional extras
+# ---------------------------------------------------------------------------
+[project.optional-dependencies]
+# Full NeMo Agent Toolkit integration (enables ``nat run`` workflow)
+nat = [
+    "nvidia-nat[langchain]>=1.4.1",
+]
+# NeMo Guardrails output safety layer
+guardrails = [
+    "nemoguardrails>=0.11.0",
+    "pandas>=2.2.0",  # 2.1.x has no Python 3.12 wheel and fails to build against NumPy 2.x
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
