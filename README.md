@@ -24,7 +24,7 @@ Input Guardrails  (politeness check — blocked messages never reach the Planner
 │                                                     │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────┐   │
 │  │ coder_tool  │  │read_file_tool│  │write_file │   │
-│  │ (Qwen-Coder │  │(filesystem)  │  │  _tool    │   │
+│  │ (Coder      │  │(filesystem)  │  │  _tool    │   │
 │  │  via NIM /  │  └──────────────┘  └───────────┘   │
 │  │  vLLM)      │  ┌─────────────────────────────┐   │
 │  └─────────────┘  │ execute_bash_tool           │   │
