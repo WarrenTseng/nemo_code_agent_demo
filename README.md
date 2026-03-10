@@ -1,4 +1,4 @@
-# NeMo Code Agent demo
+# NeMo Code Agent CLI demo
 
 An interactive, multi-agent CLI coding assistant built for internal corporate networks.
 Uses a **Dual-Model Architecture**: a large reasoning model as the **Planner** (via cloud or local NVIDIA NIM and Openai-compatible endpoint)
