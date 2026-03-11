@@ -3,7 +3,7 @@
 An interactive, multi-agent CLI coding assistant built for internal corporate networks.
 Uses a **Dual-Model Architecture**: a large reasoning model as the **Planner** (via cloud or local NVIDIA NIM and Openai-compatible endpoint)
 and a code-specialist model as the **Coder** (also via cloud or local NVIDIA NIM and Openai-compatible endpoint), where the Coder is
-registered as a *tool* — not a top-level node — so the Planner drives all coordination.
+registered as a *tool*, not a top-level node, so the Planner drives all coordination.
 
 Built on **LangGraph** + **NeMo Guardrails**, with a `prompt_toolkit` + `Rich` terminal UI, while preserving Nemo Agent Toolkit (NAT) extensibility..
 
