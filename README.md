@@ -98,7 +98,7 @@ PLANNER_API_KEY=your_api_key                    # Set to 'none' if your local en
 
 # Coder LLM — code-specialist model (NIM or local vLLM)
 CODER_URL=https://integrate.api.nvidia.com/v1   # set to http://your.local-or-cloud.openai-compatible.llm:port/v1, e.g. http://localhost:8000/v1
-CODER_MODEL=qwen/qwen2.5-coder-32b-instruct
+CODER_MODEL=nvidia/nemotron-3-nano-30b-a3b      # qwen/qwen2.5-coder-32b-instruct
 CODER_API_KEY=your_api_key                      # Set to 'none' if your local endpoint does not require authentication.
 ```
 
