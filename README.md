@@ -153,56 +153,6 @@ Resume any previous session by name:
 
 ---
 
-## Adding Tools
-
-Tools are standard LangChain `@tool` functions. Adding a new tool takes three steps:
-
-### 1. Define the tool
-
-Create a new file in `src/nemo_code_agent/tools/` or add to an existing one:
-
-```python
-# src/nemo_code_agent/tools/my_tool.py
-from langchain_core.tools import tool
-
-@tool
-def my_tool(input: str) -> str:
-    """One-line description — the Planner uses this to decide when to call the tool.
-
-    Args:
-        input: describe what this parameter means.
-
-    Returns:
-        Result string returned to the Planner.
-    """
-    # your logic here
-    return result
-```
-
-### 2. Register the tool in the graph
-
-Open `src/nemo_code_agent/workflow.py` and add your tool to the `tools` list in `build_graph_with_llm`:
-
-```python
-from nemo_code_agent.tools.my_tool import my_tool
-
-def build_graph_with_llm(planner_llm, checkpointer):
-    tools = [read_file_tool, coder_tool, write_file_tool, execute_bash_tool, my_tool]
-    ...
-```
-
-### 3. Update the Planner system prompt (optional)
-
-Add a row to the tools table in `PLANNER_SYSTEM_PROMPT` in `workflow.py` so the Planner knows when to use it:
-
-```python
-| `my_tool` | Brief description of when the Planner should call it. |
-```
-
-That's it — the Planner will automatically discover the tool schema and call it when appropriate.
-
----
-
 ## Debug Logging
 
 All inter-agent payloads, guardrail events, and tool I/O are written to:
