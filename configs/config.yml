@@ -37,35 +37,19 @@ llms:
     num_retries: 2
 
 # ---------------------------------------------------------------------------
-# Tool & Agent Function Definitions
+# Top-level Workflow — langgraph_wrapper
 # ---------------------------------------------------------------------------
-functions:
-  # --- Coder Tool (Phase 2) ---
-  # The Coder model is registered as a callable tool, not a top-level node.
-  # The Planner invokes it via a tool call; the Coder runs against coder_llm.
-  coder_tool:
-    _type: coder_tool
-    llm: coder_llm
-
-  # --- Filesystem Tools (Phase 2) ---
-  read_file_tool:
-    _type: read_file_tool
-
-  write_file_tool:
-    _type: write_file_tool
-
-  execute_bash_tool:
-    _type: execute_bash_tool
-    require_confirmation: true            # Prompt user in CLI before execution
-
+# Wraps our compiled LangGraph agent directly so NAT can serve or evaluate
+# it without any code changes.  LLM config is read from .env at import time.
+#
+# Use with:
+#   nat run   --config_file configs/config.yml --input "your question"
+#   nat serve --config_file configs/config.yml
+#   nat eval  --config_file configs/config.yml --dataset data.jsonl
+#
+# For the interactive REPL, use ./run.sh (code-agent run) instead.
 # ---------------------------------------------------------------------------
-# Top-level Workflow
-# ---------------------------------------------------------------------------
-# The code_agent_workflow is a self-contained LangGraph ReAct agent.
-# It wires coder_tool, read_file_tool, and execute_bash_tool internally —
-# there is no separate planner_agent function entry needed.
-# The workflow receives planner_llm via Builder.get_llm() at runtime.
 workflow:
-  _type: code_agent_workflow
-  llm: planner_llm
-  checkpoint_db: ${CODE_AGENT_CHECKPOINT_DB:-.agent_logs/checkpoints.db}
+  _type: langgraph_wrapper
+  graph: src/nemo_code_agent/nat_graph.py:graph
+  env: .env

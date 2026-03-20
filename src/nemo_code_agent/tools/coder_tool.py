@@ -8,10 +8,11 @@ via the CODER_* environment variables.
 
 import os
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
+from nemo_code_agent.tools.knowledge import build_rag_messages, load_static_knowledge
 from nemo_code_agent.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,13 +22,12 @@ You are an expert software engineer specialising in writing clean, correct, and
 well-structured code.
 
 ## Instructions
-- Produce complete, runnable code for the requested task.
-- If you are modifying an existing file, output the **full** updated file content.
-- Always prefix each code block with the target file path as a comment, e.g.:
-    # File: src/mypackage/utils.py
-- After the code, add a brief **Changes** section explaining what was done and why.
+- Output ONLY the complete file content — no explanations, no file path comments,
+  no "Changes" section, no markdown fences. Raw code only.
+- If you are modifying an existing file, output the full updated file content.
 - Do NOT add unnecessary prose — be concise and precise.
 - Use type hints (Python), docstrings only for public APIs, and follow PEP-8.
+- If a "Project Rules (MANDATORY)" section is present, follow every rule strictly.
 """
 
 
@@ -60,22 +60,43 @@ def coder_tool(task: str) -> str:
       - Clear acceptance criteria: what the finished code must do.
       - Any constraints (style guide, must not break existing tests, etc.).
 
-    The tool returns the generated code with a brief explanation of changes.
+    The tool returns raw file content only — no explanations, no markdown fences.
+    Pass the entire return value directly to `write_file_tool` as the `content` argument.
 
     Args:
         task: Complete description of the coding task with all context needed.
 
     Returns:
-        Generated code blocks (each prefixed with the target file path) followed
-        by a short "Changes" summary.
+        Raw file content ready to be written to disk with write_file_tool.
     """
     logger.debug("coder_tool invoked | task length=%d chars", len(task))
 
     llm = _get_coder_llm()
-    messages = [
-        SystemMessage(content=_CODER_SYSTEM_PROMPT),
-        HumanMessage(content=task),
-    ]
+    static = load_static_knowledge()
+    rag_msgs = build_rag_messages(task)
+
+    # Build a single HumanMessage containing all context:
+    # instructions + static rules + RAG chunks + task.
+    # Using HumanMessage (user role) guarantees delivery regardless of whether
+    # the model's chat template supports the system role.
+    parts = [_CODER_SYSTEM_PROMPT]
+    if static:
+        parts.append(
+            f"## Project Rules (MANDATORY)\n\n"
+            f"You MUST follow these rules in every line of code you write:\n\n"
+            f"{static}"
+        )
+    for rag in rag_msgs:
+        parts.append(rag.content)
+    parts.append(f"## Task\n\n{task}")
+
+    user_content = "\n\n---\n\n".join(parts)
+
+    logger.debug(
+        "coder_tool context | has_static=%s | rag_msgs=%d | total_len=%d",
+        bool(static), len(rag_msgs), len(user_content),
+    )
+    messages = [HumanMessage(content=user_content)]
 
     try:
         response = llm.invoke(messages)
@@ -130,11 +151,18 @@ try:
             """
             logger.debug("NAT coder_tool invoked | task_len=%d", len(task))
             llm = await builder.get_llm(config.llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
-            from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+            from langchain_core.messages import HumanMessage  # noqa: PLC0415
+            from nemo_code_agent.tools.knowledge import build_rag_messages, load_static_knowledge  # noqa: PLC0415
 
-            response = await llm.ainvoke(
-                [SystemMessage(content=_CODER_SYSTEM_PROMPT), HumanMessage(content=task)]
-            )
+            static = load_static_knowledge()
+            rag_msgs = build_rag_messages(task)
+            parts = [_CODER_SYSTEM_PROMPT]
+            if static:
+                parts.append(f"## Project Rules (MANDATORY)\n\nYou MUST follow these rules in every line of code you write:\n\n{static}")
+            for rag in rag_msgs:
+                parts.append(rag.content)
+            parts.append(f"## Task\n\n{task}")
+            response = await llm.ainvoke([HumanMessage(content="\n\n---\n\n".join(parts))])
             return response.content
 
         yield FunctionInfo.from_fn(_generate, description=_generate.__doc__)

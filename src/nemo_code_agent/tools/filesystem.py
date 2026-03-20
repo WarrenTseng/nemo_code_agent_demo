@@ -44,6 +44,17 @@ confirmation_active = threading.Event()
 # The ESC watcher in the REPL detects this and cancels the current agent turn.
 _state: dict = {"decline_detected": False}
 
+# When True, execute_bash_tool skips the interactive confirmation prompt.
+# Enabled only after the user explicitly acknowledges the risk at startup.
+_auto_approve: bool = False
+
+
+def set_auto_approve(enabled: bool) -> None:
+    """Enable or disable auto-approval for execute_bash_tool."""
+    global _auto_approve
+    _auto_approve = enabled
+    logger.info("execute_bash_tool auto-approve: %s", "ENABLED" if enabled else "disabled")
+
 
 def reset_turn_state() -> None:
     """Reset per-turn shared state. Called by the REPL at the start of each turn."""
@@ -111,6 +122,9 @@ def write_file_tool(path: str, content: str) -> str:
     file path and the full file content (not a diff or patch).  Parent
     directories are created automatically.
 
+    IMPORTANT: The user will be shown the file path and asked to approve
+    before the file is written.  If the user declines, the file is NOT written.
+
     Args:
         path: Absolute or relative path of the file to write or overwrite.
         content: The complete file content to write.
@@ -118,9 +132,32 @@ def write_file_tool(path: str, content: str) -> str:
     Returns:
         Confirmation with the resolved path and byte count, or an error message.
     """
-    logger.debug("write_file_tool | path=%s | content_len=%d", path, len(content))
+    logger.debug("write_file_tool | path=%s | content_len=%d | auto_approve=%s", path, len(content), _auto_approve)
 
     p = Path(path).expanduser()
+    overwriting = p.exists()
+
+    _console.print()
+    _console.print("[bold yellow]\\[Agent wants to write a file][/bold yellow]")
+    _console.print(
+        f"  [bold]{'Overwrite' if overwriting else 'Create'}:[/bold] {p} "
+        f"[dim]({len(content.encode('utf-8')):,} bytes)[/dim]"
+    )
+
+    if _auto_approve:
+        _console.print("[dim yellow]Auto-approved.[/dim yellow]")
+        logger.info("write_file_tool auto-approved | path=%s", path)
+    else:
+        confirmation_active.set()
+        try:
+            answer = input("\033[33mApprove? [Y/n]: \033[0m")
+        finally:
+            confirmation_active.clear()
+        if answer.strip().lower() in ("n", "no"):
+            logger.info("write_file_tool declined by user | path=%s", path)
+            _state["decline_detected"] = True
+            return "File write cancelled by user."
+
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         byte_count = len(content.encode("utf-8"))
@@ -160,28 +197,32 @@ async def execute_bash_tool(command: str) -> str:
     Returns:
         Combined stdout + stderr from the command, or a cancellation notice.
     """
-    logger.debug("execute_bash_tool | command=%s", command)
+    logger.debug("execute_bash_tool | command=%s | auto_approve=%s", command, _auto_approve)
 
-    # --- Interactive confirmation -------------------------------------------
+    # --- Interactive confirmation (skipped in auto-approve mode) ------------
     _console.print()
     _console.print("[bold yellow]\\[Agent wants to run a command][/bold yellow]")
     _console.print(f"  [bold]$ {command}[/bold]")
 
-    # Signal the ESC watcher to pause and restore normal terminal mode so that
-    # the blocking input() call works correctly.
-    confirmation_active.set()
-    try:
-        answer = await asyncio.to_thread(
-            input,
-            "\033[33mApprove? [Y/n]: \033[0m",
-        )
-    finally:
-        confirmation_active.clear()
+    if _auto_approve:
+        _console.print("[dim yellow]Auto-approved.[/dim yellow]")
+        logger.info("execute_bash_tool auto-approved | command=%s", command)
+    else:
+        # Signal the ESC watcher to pause and restore normal terminal mode so that
+        # the blocking input() call works correctly.
+        confirmation_active.set()
+        try:
+            answer = await asyncio.to_thread(
+                input,
+                "\033[33mApprove? [Y/n]: \033[0m",
+            )
+        finally:
+            confirmation_active.clear()
 
-    if answer.strip().lower() in ("n", "no"):
-        logger.info("execute_bash_tool declined by user | command=%s", command)
-        _state["decline_detected"] = True
-        return "Command cancelled by user."
+        if answer.strip().lower() in ("n", "no"):
+            logger.info("execute_bash_tool declined by user | command=%s", command)
+            _state["decline_detected"] = True
+            return "Command cancelled by user."
 
     # --- Stream output with Rich Live panel ---------------------------------
     output_lines: list[str] = []

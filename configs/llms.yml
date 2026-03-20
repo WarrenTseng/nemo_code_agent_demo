@@ -1,0 +1,37 @@
+# LLM definitions for NAT Builder — used by the interactive REPL (./run.sh).
+# Contains only the llms section so NAT validation never checks workflow paths.
+#
+# For nat run / nat serve / nat eval, use config.yml instead.
+
+general:
+  use_uvloop: true
+  telemetry:
+    logging:
+      console:
+        _type: console
+        level: WARNING
+
+llms:
+  planner_llm:
+    _type: nim
+    model_name: ${PLANNER_MODEL}
+    base_url: ${PLANNER_URL}
+    api_key: ${PLANNER_API_KEY}
+    temperature: 0.2
+    top_p: 0.9
+    max_tokens: 8192
+    num_retries: 3
+
+  coder_llm:
+    _type: nim
+    model_name: ${CODER_MODEL}
+    base_url: ${CODER_URL}
+    api_key: ${CODER_API_KEY:-none}
+    temperature: 0.1
+    top_p: 0.95
+    max_tokens: 16384
+    num_retries: 2
+
+workflow:
+  _type: code_agent_workflow
+  llm: planner_llm

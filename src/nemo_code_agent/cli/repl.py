@@ -200,10 +200,17 @@ class CodeAgentREPL:
         agent,
         session_id: str,
         history_file: str = ".agent_logs/.repl_history",
+        show_thinking: bool = False,
     ) -> None:
         self.agent = agent
         self.session_id = session_id
-        self._langgraph_config = {"configurable": {"thread_id": session_id}}
+        self.show_thinking = show_thinking
+        _recursion_limit = int(os.environ.get("AGENT_RECURSION_LIMIT", "50"))
+        self._langgraph_config = {
+            "configurable": {"thread_id": session_id},
+            "recursion_limit": _recursion_limit,
+        }
+        self._last_thinking: str = ""   # buffered thinking from the last turn
 
         _history = FileHistory(history_file)
         self._prompt_session: PromptSession = PromptSession(
@@ -222,6 +229,7 @@ class CodeAgentREPL:
         """Stream graph events and render them to the terminal in real time."""
 
         response_buffer: list[str] = []
+        thinking_buffer: list[str] = []    # accumulates reasoning tokens (hidden)
         in_thinking: bool = False          # True while emitting reasoning tokens
         emitted_agent_prefix: bool = False  # Avoid double-printing "Agent ❯"
         current_tool: Optional[str] = None
@@ -247,22 +255,26 @@ class CodeAgentREPL:
                     thinking: str = chunk.additional_kwargs.get("reasoning_content", "")
                     if thinking:
                         if not in_thinking:
-                            console.print(
-                                Text("⟨thinking⟩", style="dim italic"),
-                                end=" ",
-                            )
+                            if self.show_thinking:
+                                console.print(
+                                    Text("💭 Thinking", style="dim italic cyan"),
+                                )
+                            else:
+                                console.print(
+                                    Text("💭 thinking...", style="dim italic"),
+                                    end="\r",  # overwrite with response prefix when done
+                                )
                             in_thinking = True
-                        console.print(thinking, end="", style="dim italic grey50")
+                        thinking_buffer.append(thinking)
+                        if self.show_thinking:
+                            console.print(thinking, end="", style="dim italic grey50")
 
                     # Regular response tokens
                     content: str = chunk.content or ""
                     if content:
                         if in_thinking:
-                            # Transition out of thinking block
-                            console.print(
-                                Text("\n⟨/thinking⟩\n", style="dim italic"),
-                            )
                             in_thinking = False
+                            console.print()  # clear the "thinking..." line
                         if not emitted_agent_prefix:
                             console.print(
                                 Text("Agent ❯ ", style="bold green"),
@@ -277,8 +289,8 @@ class CodeAgentREPL:
                 # ----------------------------------------------------------
                 elif kind == "on_tool_start":
                     if in_thinking:
-                        console.print(Text("\n⟨/thinking⟩\n", style="dim italic"))
                         in_thinking = False
+                        console.print()  # clear the "thinking..." line
 
                     current_tool = event["name"]
                     tool_input = event["data"].get("input", {})
@@ -359,6 +371,14 @@ class CodeAgentREPL:
                     Text("[Agent completed without text response]", style="dim italic")
                 )
 
+        # Store thinking for /thinking command
+        if thinking_buffer:
+            self._last_thinking = "".join(thinking_buffer)
+            if not self.show_thinking:
+                console.print(
+                    Text("💭 /thinking to expand", style="dim italic"),
+                )
+
         console.print()  # trailing blank line
 
     # ------------------------------------------------------------------
@@ -399,6 +419,22 @@ class CodeAgentREPL:
             if user_input.lower() in ("exit", "quit", "q", ":q"):
                 console.print("[dim]Goodbye.[/dim]")
                 break
+
+            # /thinking — expand the last buffered thinking block
+            if user_input.lower() == "/thinking":
+                if self._last_thinking:
+                    console.print(
+                        Panel(
+                            Text(self._last_thinking, style="dim italic grey50"),
+                            title="[dim]💭 Thinking[/dim]",
+                            border_style="bright_black",
+                            padding=(0, 1),
+                        )
+                    )
+                else:
+                    console.print("[dim]No thinking captured from the last turn.[/dim]")
+                console.print()
+                continue
 
             # ---- Input guardrails ---------------------------------------
             safe_input, input_blocked = await apply_input_guardrails(user_input)

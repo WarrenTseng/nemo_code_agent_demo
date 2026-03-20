@@ -4,7 +4,6 @@ Usage examples::
 
     code-agent run
     code-agent run --session my-project-session
-    code-agent run --thinking           # enable Nemotron extended reasoning
     code-agent run --checkpoint ./my_checkpoints.db
 
 Environment variables (set in .env or shell):
@@ -99,6 +98,13 @@ def run(
         False,
         "--thinking",
         help="Enable extended reasoning mode for the Planner (Nemotron models).",
+        hidden=True,
+    ),
+    show_thinking: bool = typer.Option(
+        False,
+        "--show-thinking",
+        help="Stream the thinking process live in the terminal.",
+        hidden=True,
     ),
     env_file: Optional[Path] = typer.Option(
         None,
@@ -110,10 +116,59 @@ def run(
         "--history",
         help="Path to the prompt_toolkit input history file.",
     ),
+    auto_approve: bool = typer.Option(
+        False,
+        "--auto-approve",
+        help="Skip the approval prompt for every bash command (requires explicit confirmation at startup).",
+    ),
 ) -> None:
     """Start an interactive coding agent session."""
     _load_env(env_file)
     _check_required_env()
+
+    if auto_approve:
+        from rich.panel import Panel
+        from rich.text import Text
+
+        console.print()
+        console.print(
+            Panel(
+                Text.assemble(
+                    ("⚠  AUTO-APPROVE MODE\n\n", "bold red"),
+                    ("With this flag, the agent will execute ALL bash commands and write ALL files "
+                     "without asking for your approval first.\n\n", "yellow"),
+                    ("This includes potentially destructive operations such as:\n", "yellow"),
+                    ("  rm -rf, git reset --hard, DROP TABLE, curl | bash, overwriting any file, ...\n\n", "bold yellow"),
+                    ("We suggest enabling this only in an isolated environment such as:\n", "white"),
+                    ("  • A Docker container\n  • A sandbox VM\n  • A CI/CD pipeline with no sensitive data\n", "cyan"),
+                ),
+                title="[bold red]Security Warning[/bold red]",
+                border_style="red",
+                padding=(1, 2),
+            )
+        )
+        console.print()
+
+        try:
+            answer = input('\033[33mType "YES I UNDERSTAND" to enable auto-approve, or press Enter to cancel: \033[0m')
+        except (KeyboardInterrupt, EOFError):
+            answer = ""
+
+        if answer.strip() != "YES I UNDERSTAND":
+            console.print("[dim]Auto-approve cancelled. Starting with manual approval (safe mode).[/dim]")
+            console.print()
+            auto_approve = False
+        else:
+            from nemo_code_agent.tools import filesystem as _fs
+            _fs.set_auto_approve(True)
+            console.print("[bold yellow]⚠  Auto-approve ENABLED — all bash commands will run without confirmation.[/bold yellow]")
+            console.print()
+
+    # Resolve CODER_KNOWLEDGE_DIR to an absolute path before changing cwd,
+    # so knowledge/static.md is always found relative to where the CLI was invoked.
+    knowledge_dir = os.environ.get("CODER_KNOWLEDGE_DIR", "knowledge")
+    if not os.path.isabs(knowledge_dir):
+        os.environ["CODER_KNOWLEDGE_DIR"] = str(Path(knowledge_dir).resolve())
 
     # Change into the workspace directory so all relative paths in the tools
     # (read_file_tool, write_file_tool, execute_bash_tool) resolve there.
@@ -133,13 +188,14 @@ def run(
         f"[dim]Coder   : {os.environ['CODER_MODEL']} @ {os.environ['CODER_URL']}  key={coder_key}[/dim]"
     )
 
-    asyncio.run(_async_run(session_id, checkpoint_db, thinking, history_file))
+    asyncio.run(_async_run(session_id, checkpoint_db, thinking, show_thinking, history_file))
 
 
 async def _async_run(
     session_id: str,
     checkpoint_db: str,
     enable_thinking: bool,
+    show_thinking: bool,
     history_file: str,
 ) -> None:
     """Async entry point — opens checkpointer and starts the REPL."""
@@ -153,7 +209,12 @@ async def _async_run(
         checkpoint_db=checkpoint_db,
         enable_thinking=enable_thinking,
     ) as agent:
-        repl = CodeAgentREPL(agent, session_id=session_id, history_file=history_file)
+        repl = CodeAgentREPL(
+            agent,
+            session_id=session_id,
+            history_file=history_file,
+            show_thinking=show_thinking,
+        )
         await repl.run()
 
 

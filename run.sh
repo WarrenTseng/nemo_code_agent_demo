@@ -13,6 +13,7 @@
 #   ./run.sh -w ~/projects/myapp -s my-project   # workspace + named session
 #   ./run.sh --thinking                          # enable Nemotron reasoning mode
 #   ./run.sh --checkpoint ./my.db                # custom SQLite checkpoint path
+#   ./run.sh --auto-approve                      # skip bash confirmation (sandbox/Docker only!)
 #   ./run.sh --help                              # show all options
 
 set -euo pipefail
@@ -64,7 +65,11 @@ info "Using Python: $PYTHON_BIN ($(${PYTHON_BIN} --version))"
 # ---------------------------------------------------------------------------
 # 2. Create virtual environment if it does not exist
 # ---------------------------------------------------------------------------
-VENV_DIR="$SCRIPT_DIR/.venv"
+# Store the venv outside OneDrive/cloud-synced folders to avoid I/O timeouts
+# when package metadata files are read during import (pydantic plugin scan etc).
+# Falls back to the local .venv if XDG_CACHE_HOME is not set.
+_VENV_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/nemo_code_agent_venv"
+VENV_DIR="${NEMO_VENV_DIR:-$_VENV_CACHE}"
 
 if [ ! -d "$VENV_DIR" ]; then
     info "Creating virtual environment at .venv ..."
@@ -93,9 +98,9 @@ fi
 if $needs_install; then
     pip install --quiet --upgrade pip
 
-    # Install guardrails (always — pandas>=2.2 avoids NumPy 2.x build failures)
-    info "Installing nemo-code-agent + guardrails ..."
-    pip install --quiet --prefer-binary -e "$SCRIPT_DIR[guardrails]"
+    # Install core + guardrails + RAG (chromadb for persistent vector store)
+    info "Installing nemo-code-agent + guardrails + rag ..."
+    pip install --quiet --prefer-binary -e "$SCRIPT_DIR[guardrails,rag]"
 
     # Install NAT separately — nvidia-nat requires Python <3.14, so this may
     # legitimately fail on newer Python versions.  Treat it as optional.
