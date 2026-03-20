@@ -59,7 +59,7 @@ If you'd like to try out the NIM endpoints, please visit their website to regist
 
 ## Prerequisites
 
-- Python 3.10 or later
+- Python 3.10 or later, 3.12 is recommended
 - Access to an OpenAI-compatible LLM endpoint for the Planner (Cloud or local NVIDIA NIM and Openai-compatible endpoint)
 - Access to a code-specialist LLM endpoint for the Coder (Cloud or local NVIDIA NIM and Openai-compatible endpoint)
 
