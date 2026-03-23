@@ -1,4 +1,4 @@
-# An example for Code Agent CLI using NeMo
+# A Code Agent CLI Example using NeMo
 
 An interactive, simple, multi-agent CLI coding assistant, developed with my AI friends, built for internal corporate networks.
 Uses a **Dual-Model Architecture**: a large reasoning model as the **Planner** (via cloud or local NVIDIA NIM and Openai-compatible endpoint)
